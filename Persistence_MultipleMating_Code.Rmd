@@ -1,0 +1,2102 @@
+---
+title: "Persistence_MultipleMating_Code"
+author: Kathleen E. Gordon, Mariana F. Wolfner, Brian P. Lazzaro
+output: html_notebook
+---
+
+This is an R Markdown document that contains all the script used to analyze data collected in "A single mating is sufficient to induce persistent reduction of immune defense in mated female Drosophila melanogaster. All data frames are available at https://github.com/WolfnerLab/Persistent_Mating_GordonK.git. Three types of data were analyzed: 1. Survivorship over a 5 day period 2. Bacterial load of single flies at 18h post-infection. 3. Gene expression by qRT-PCR 8h post-infection. For survivorship and bacterial load, each input file is a single block of that experiment. For gene expression, data files are from one 96 well plate.
+
+#### Persistent Effects of Mating on Immune Defense
+# Survivorship: Block 1 
+Definition of variables:
+Round: Block/Replicate of the experiment
+Vial: Food vial in which groups of ~10 females were kept
+Genotype: CS (Wildtype) _ Interval between mating and infection
+Mating Status: Mated (M) or unmated (V)
+Infection Status: Infected (I) or Uninfected (S)
+OD: Optical density of bacterial solution used to infect--1
+Time to Infection: Interval between mating and infection (days)
+Death_Time: Hour at which death was recorded: 24, 48, 72, 96, or 120
+Censor: Dead (1) or not dead (0)
+ID: Interval between mating and infection (10,7,4,2,V)
+Number: Count of individual females assayed
+```{r}
+library(ggplot2)
+library(survminer)
+library(survival)
+SurviveR1<-read.csv("TI_R1_SURVIVE_3_10_19.csv")
+fit<- survfit(Surv(Death_Time,Censor==1)~ID, data=SurviveR1)
+plot<-ggsurvplot(fit,
+           break.time.by=24,
+           pval=F,
+           legend="bottom",
+           legend.title="Mated/Infection Status",
+           main=" Round 1: Time Between Mating and Infection",
+           ylab="Proportion Surviving",
+          risk.table = T)
+plot
+```
+
+# Survivorship: Block 2 
+```{r}
+SurviveR3<-read.csv("TI_R3_SURVIVE_3_14_19.csv")
+fit3<- survfit(Surv(Death_Time,Censor==1)~ID, data=SurviveR3)
+plot3<-ggsurvplot(fit3,
+           break.time.by=24,
+           pval=F,
+           legend="bottom",
+           legend.title="Mated/Infection Status",
+           main=" Round 2: Time Between Mating and Infection",
+           ylab="Proportion Surviving",
+          risk.table = T)
+plot3
+```
+
+# Combined Suvivorship
+```{r}
+library(ggplot2)
+library(ggpubr)
+library(ggsignif)
+Survive_All<-rbind(SurviveR1, SurviveR3)
+Survive_All<-subset(Survive_All, Survive_All$Infection.Status=="I")
+Survive_All$ID<-factor(Survive_All$ID, levels=c("V", "2", "4","7","10"))
+fit_all<- survfit(Surv(Death_Time,Censor==1)~ID, data=Survive_All)
+plot_all<-ggsurvplot(fit_all,
+           break.time.by=24,
+           pval=F,
+           legend= "right",
+           legend.title= "Days Between Mating and Infection",
+           legend.labs= c("Virgin","Two Days", "Four Days", "Seven Days", "Ten Days"),
+           palette =c("grey23", "steelblue2", "#D65108", "navy",  "grey57"),
+           main=" All Survivorship: Time Between Mating and Infection",
+           ylab="Proportion Surviving",
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           risk.table = F) 
+
+plot_all
+```
+
+# Cox Mixed Effects Model on Combined Survivorship
+```{r}
+library(coxme)
+mod1<-coxme(Surv(Death_Time, Censor)~ID+(1|Round), data=Survive_All)
+summary(mod1)
+```
+
+# Multiple Comparisons of Mating Treatments
+```{r}
+mod1.glht <- glht(mod1, mcp(ID = "Tukey"))
+summary(mod1.glht)
+cld(mod1.glht)
+```
+
+
+# Bacterial Load:
+Definition of variables: 
+Plate Name: Interval between Mating and Infection _ Biological Replicate Number--ex. 10_16 or 7_10
+Dilution: Dilution factor of sample
+Colony Name: Type of colony assessed (all A, light colonies)
+Sector Constant: Sector of spiral plate counted by plate counter
+Count/Frame: Number of colonies within a frame
+Count/ml: Colonies per mL of homogenate
+Mean Count: Average of all counts per ml
+User: Admin of Protocol software
+Flags: software generated flags
+Created: Software generated #, stand in for date
+Comments/Notes: Empty
+Spiral Volume: amount of fly/bacteria homogenate plated, all samples, 50uL
+
+# Bacterial Round: Single Block
+```{r}
+BacLoad<-read.csv("TI_R2_BacLoad_3_14_19.csv")
+head(BacLoad)
+#Add in columns for Infection Status, Mating Status, and Time Point
+#Make new columns
+BacLoad$Infect.Stat<-c("-")
+BacLoad$Mate.Stat<-c("-")
+
+#Assign Mating Status
+BacLoad[grep('10_',BacLoad$Plate.Name),'Mate.Stat'] <- 'M'
+BacLoad[grep('7_',BacLoad$Plate.Name),'Mate.Stat'] <- 'M'
+BacLoad[grep('4_',BacLoad$Plate.Name),'Mate.Stat'] <- 'M'
+BacLoad[grep('2_',BacLoad$Plate.Name),'Mate.Stat'] <- 'M'
+BacLoad[grep('V_',BacLoad$Plate.Name),'TMate.Stat'] <- 'V'
+
+#Assign Time Point
+BacLoad[grep('10_',BacLoad$Plate.Name),'Time.Point'] <- '10'
+BacLoad[grep('7_',BacLoad$Plate.Name),'Time.Point'] <- '7'
+BacLoad[grep('4_',BacLoad$Plate.Name),'Time.Point'] <- '4'
+BacLoad[grep('2_',BacLoad$Plate.Name),'Time.Point'] <- '2'
+BacLoad[grep('V_',BacLoad$Plate.Name),'Time.Point'] <- 'V'
+
+
+# Time x Mating Status
+BacLoad$Time.Mate<-c("-")
+BacLoad[grep('10_',BacLoad$Plate.Name), 'Time.Mate'] <- '10M'
+BacLoad[grep('7_',BacLoad$Plate.Name), 'Time.Mate'] <- '7M'
+BacLoad[grep('4_',BacLoad$Plate.Name), 'Time.Mate'] <- '4M'
+BacLoad[grep('2_',BacLoad$Plate.Name), 'Time.Mate'] <- '2M'
+BacLoad[grep('V_',BacLoad$Plate.Name),'Time.Mate'] <- 'V'
+```
+
+
+```{r}
+#Natural Transform CFUs, add 1 to account for zeros in data
+BacLoad$ln.CFU<-log(BacLoad$Count...ml)
+
+BacLoad$Count.Plus.1<-BacLoad$Count...ml+1
+BacLoad$ln.CFU.Plus.1<-log(BacLoad$Count.Plus.1)
+
+hist(BacLoad$ln.CFU)
+hist(BacLoad$ln.CFU.Plus.1)
+```
+
+
+# Block 1 Figure Code
+```{r}
+library(ggbeeswarm)
+library(Hmisc)
+mycolors<- c("grey23","steelblue2", "#D65108", "navy", "grey57")
+ggplot(BacLoad, aes(x = factor(Time.Mate), y = ln.CFU.Plus.1, color = Time.Mate, group=Time.Mate)) +
+  geom_quasirandom(dodge.width = 0.75, size = 1.5) +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", width = 0.1, position = position_dodge(0.75), color = "black") + 
+  stat_summary(fun.y = mean, geom = "crossbar",  position= position_dodge(0.75), color = "black") +
+  labs(x = "Days Between Mating and Infection", y = "ln CFU per Fly", color = "Days Between Mating and Infection") + 
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "none", axis.text.x = element_text(color = "black", size = 10, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"="Virgin","2M"="Two Days","4M"="Four Days","7M"="Seven Days","10M"="Ten Days")) + labs(x="Days Between Mating and Infection", y="ln CFU per Fly")
+```
+
+# ANOVA and Tukey Comparisons
+```{r}
+library(multcomp)
+BacLoad$Time.Point<-as.factor(BacLoad$Time.Point)
+Load.lm<-lm(ln.CFU.Plus.1~Time.Point, data=BacLoad)
+anova(Load.lm)
+Tukey.Load<-glht(Load.lm, linfct=mcp(Time.Point="Tukey"))
+summary(Tukey.Load)
+```
+
+
+#### Effects of Multiple Matings on Immune Defense
+
+# Survivorship: Block 1
+Definition of variables:
+Round: Block/Replicate of the experiment
+Vial: Food vial in which groups of ~10 females were kept
+Genotype: CS (Wildtype)
+Mating Status: 2 (Two matings), 1 (One mating), V (Unmated)
+Infection Status: Infected (I) or Uninfected (S)
+OD: Optical density of bacterial solution used to infect--1
+Time to Infection: Interval between mating and infection (days)
+Death_Time: Hour at which death was recorded: 24, 48, 72, 96, or 120
+Censor: Dead (1) or not dead (0)
+Score: Scoring of two types of progeny for 2 matings, WT progeny for 1 mating
+
+```{r}
+library(survival)
+library(ggplot2)
+library(survminer)
+R1_Survive<-read.csv("2M_R1_Survive_3_5_19.csv")
+head(R1_Survive)
+```
+
+
+```{r}
+# Remove samples that did not mate twice or 1 matings with no progeny
+R1_Survive_Score<-R1_Survive[-c(3,4,11,12,13,20,25,27,29,58),]
+```
+
+```{r}
+fitR1<- survfit(Surv(Death_Time,Censor==1)~Mating.Status+Infection.Status, data=R1_Survive_Score)
+plot_R1<-ggsurvplot(fitR1,
+           break.time.by=24,
+           pval=F,
+           legend= "bottom",
+           legend.title= "Number of Matings",
+           legend.labs= c("One Mating", "Two Matings", "Virgin"),
+           palette =c("darkorange2", "steelblue2", "grey23"),
+           main=" All Survivorship: Two Matings",
+           ylab="Proportion Surviving",
+           risk.table = T)
+plot_R1
+```
+
+# Survivorship: Block 2
+```{r}
+R2_Survive<-read.csv("2M_R2_Survive_3_7_19.csv")
+head(R2_Survive)
+```
+
+
+```{r}
+# Remove samples that did not mate twice or 1 matings with no progeny
+R2_Survive_Score<-R2_Survive[-c(4,10,13,18,24,30,32,33,34,36,41,49),]
+```
+
+
+# plot with shams infections
+```{r}
+fitR2_temp<- survfit(Surv(Death_Time,Censor==1)~Mating.Status+Infection.Status, data=R2_Survive_Score)
+plot_R2_temp<-ggsurvplot(fitR2_temp,
+           break.time.by=24,
+           pval=F,
+           legend= "bottom",
+           legend.title= "Number of Matings",
+           palette =c("darkorange2", "steelblue2", "grey23", "navy"),
+           main=" All Survivorship: Two Matings",
+           ylab="Proportion Surviving",
+           risk.table = T)
+
+plot_R2_temp
+```
+
+# plot with only infected samples
+```{r}
+R2_Survive_Score<-subset(R2_Survive_Score, R2_Survive_Score$Infection.Status=="I")
+
+fitR2<- survfit(Surv(Death_Time,Censor==1)~Mating.Status+Infection.Status, data=R2_Survive_Score)
+plot_R2<-ggsurvplot(fitR2,
+           break.time.by=24,
+           pval=F,
+           legend= "bottom",
+           legend.title= "Number of Matings",
+           legend.labs= c("One Mating", "Two Matings", "Virgin"),
+           palette =c("darkorange2", "steelblue2", "grey23"),
+           main=" All Survivorship: Two Matings",
+           ylab="Proportion Surviving",
+           risk.table = T)
+
+plot_R2
+```
+
+# Combined Survivorship
+```{r}
+Two_AllSurvive<-rbind(R1_Survive_Score, R2_Survive_Score)
+Two_AllSurvive$Mating.Status<-factor(Two_AllSurvive$Mating.Status, levels=c("V", "1", "2"))
+fit_Two<- survfit(Surv(Death_Time,Censor==1)~Mating.Status+Infection.Status, data=Two_AllSurvive)
+plot_Two<-ggsurvplot(fit_Two,
+           break.time.by=24,
+           pval=F,
+           legend= "right",
+           legend.title= "Number of Matings",
+           legend.labs= c("Virgin", "One", "Two"),
+           palette =c("grey23","#D65108", "steelblue2"),
+           main=" All Survivorship: Two Matings",
+           ylab="Proportion Surviving",
+           font.x = c(14, "bold", "black"),
+           font.y = c(14, "bold", "black"),
+           risk.table = F)
+
+plot_Two
+```
+
+# Cox Mixed Effect Model
+```{r}
+library(coxme)
+R1_Survive_Score$Mating.Status<-as.factor(R1_Survive_Score$Mating.Status)
+model_R1 <- coxme(Surv(Death_Time, Censor)~Mating.Status+(1|Round), data=R1_Survive_Score)
+summary(model_R1)
+```
+
+# Multiple Comparisons of Mating Status
+```{r}
+modR1.glht <- glht(model_R1, mcp(Mating.Status = "Tukey"))
+summary(modR1.glht)
+cld(modR1.glht)
+```
+
+
+#Bacterial Load: Round 1
+Definition of variables: 
+Plate Name: Mating Treatment (Unmated, 1 mating, 2 matings) _ (biological replicate)
+Dilution: Dilution factor of sample
+Colony Name: Type of colony assessed (all A, light colonies)
+Sector Constant: Sector of spiral plate counted by plate counter
+Count/Frame: Number of colonies within a frame
+User: Admin of Protocol software
+Flags: software generated flags
+Created: Software generated #, stand in for date
+Comments/Notes: Empty
+Spiral Volume: amount of fly/bacteria homogenate plated, all samples, 50uL
+Count/ml: Colonies per mL of homogenate
+Mean Count: Average of all counts per ml
+
+
+```{r}
+BacR3<-read.csv("2M_R3_3_12_BAC.csv")
+head(BacR3)
+```
+
+
+```{r}
+#Add in columns for Infection Status, Mating Status, and Time Point
+#Make new columns
+BacR3$Mate.Stat<-c("-")
+BacR3$Num.Mate<-c("-")
+
+#Assign Mating Status
+BacR3[grep('1_M',BacR3$Plate.Name),'Mate.Stat'] <- 'M'
+BacR3[grep('2_M',BacR3$Plate.Name),'Mate.Stat'] <- 'M'
+BacR3[grep('V_',BacR3$Plate.Name),'Mate.Stat'] <- 'V'
+
+#Assign Number of Matings
+BacR3[grep('1_M',BacR3$Plate.Name),'Num.Mate'] <- '1'
+BacR3[grep('2_M',BacR3$Plate.Name),'Num.Mate'] <- '2'
+BacR3[grep('V_',BacR3$Plate.Name),'Num.Mate'] <- 'V'
+
+```
+
+
+```{r}
+# Need to remove those that were scored as not mating twice or once
+BacR3<-BacR3[-c(7,29,30,35),]
+```
+
+
+```{r}
+# Plots!!!!
+#ln of CFUs
+
+BacR3$CFU<-BacR3$Count...ml*0.5
+BacR3$ln.CFU<-log(BacR3$CFU)
+
+BacR3$Count.Plus.1<-BacR3$CFU+1
+BacR3$ln.CFU.Plus.1<-log(BacR3$Count.Plus.1) 
+
+hist(BacR3$ln.CFU)
+hist(BacR3$ln.CFU.Plus.1)
+```
+
+
+```{r}
+#Remove unnecessary rows
+BacR3<-BacR3[1:142,]
+```
+
+#### Bacterial Load: Block 1 Plot
+```{r}
+BacR3$Num.Mate<-factor(BacR3$Num.Mate, levels=c("V","1","2"))
+mycolors<- c("grey23","#D65108", "steelblue2")
+ggplot(BacR3, aes(x=factor(Num.Mate), y=ln.CFU.Plus.1)) + geom_dotplot(aes(x=BacR3$Num.Mate, color=Num.Mate, fill=Num.Mate), binaxis = "y", stackdir = "center", binwidth = .50, dotsize = .85)  + scale_color_manual(values = mycolors) + scale_fill_manual(values = mycolors) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "none", axis.text.x = element_text(color = "black", size = 10, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + stat_summary(BacR3=mean_sdl, fun.args = list(mult=2), geom="pointrange", color="black")+ scale_x_discrete(labels=c("V"="Virgin","2"="Two Matings","1"="One Mating")) + labs(x="Number of Matings", y="ln CFU per Fly")
+```
+
+# Bacterial Load: Block 2
+Definition of variables: 
+Plate Name: Mating Treatment (Unmated, 1 mating, 2 matings) _ (biological replicate)
+Dilution: Dilution factor of sample
+Colony Name: Type of colony assessed (all A, light colonies)
+Sector Constant: Sector of spiral plate counted by plate counter
+Count/Frame: Number of colonies within a frame
+User: Admin of Protocol software
+Flags: software generated flags
+Created: Software generated #, stand in for date
+Comments/Notes: Empty
+Spiral Volume: amount of fly/bacteria homogenate plated, all samples, 50uL
+Count/ml: Colonies per mL of homogenate
+Mean Count: Average of all counts per ml
+X: Scoring of two or one type of progeny for 2 matings, scoring for WT progeny in 1 mating
+
+```{r}
+BacR6<-read.csv("2M_5_18_19_SCORED.csv")
+head(BacR6)
+```
+
+```{r}
+#Add in columns for Infection Status, Mating Status, and Time Point
+#Make new columns
+BacR6$Mate.Stat<-c("-")
+BacR6$Num.Mate<-c("-")
+
+#Assign Mating Status
+BacR6[grep('1_',BacR6$Plate.Name),'Mate.Stat'] <- 'M'
+BacR6[grep('2_',BacR6$Plate.Name),'Mate.Stat'] <- 'M'
+BacR6[grep('V_',BacR6$Plate.Name),'Mate.Stat'] <- 'V'
+
+#Assign Number of Matings
+BacR6[grep('1_',BacR6$Plate.Name),'Num.Mate'] <- '1'
+BacR6[grep('2_',BacR6$Plate.Name),'Num.Mate'] <- '2'
+BacR6[grep('V_',BacR6$Plate.Name),'Num.Mate'] <- 'V'
+```
+
+
+```{r}
+BacR6$CFU<-BacR6$Count...ml*0.5
+BacR6$ln.CFU<-log(BacR6$CFU)
+class(BacR6$ln.CFU)
+
+BacR6$Count.Plus.1<-BacR6$CFU+1
+BacR6$ln.CFU.Plus.1<-log(BacR6$Count.Plus.1) 
+
+hist(BacR6$ln.CFU)
+hist(BacR6$ln.CFU.Plus.1)
+```
+
+
+```{r}
+# Need to remove those that were scored as not mating twice or once
+BacR6<-subset(BacR6, BacR6$X!="NO PROG")
+BacR6<-subset(BacR6, BacR6$X!="NO 2ND PROG")
+BacR6<-subset(BacR6, BacR6$X!="NO GFP")
+```
+
+# Combined Bacterial Load
+```{r}
+BacR3$Round<-3
+BacR6$Round<-6
+BacR3<-BacR3[,c('Plate.Name','Dilution','CFU', 'ln.CFU.Plus.1', 'Num.Mate', 'Mate.Stat', 'Round')]
+BacR6<-BacR6[,c('Plate.Name','Dilution','CFU', 'ln.CFU.Plus.1', 'Num.Mate', 'Mate.Stat', 'Round')]
+BacAll<-rbind(BacR3,BacR6)
+# Removes NAs
+BacAll<-subset(BacAll, BacAll$Num.Mate!="NA")
+```
+
+# Combined Bacterial Load Plot
+```{r}
+library(ggbeeswarm)
+
+library(Hmisc)
+
+library(ggpubr)
+
+ggplot(BacAll, aes(x = factor(Num.Mate), y = ln.CFU.Plus.1, color = Num.Mate, group=Num.Mate)) +
+  geom_quasirandom(dodge.width = 0.75, size = 1.5) +
+  stat_summary(fun.data = mean_sdl, geom = "errorbar", width = 0.1, position = position_dodge(0.75), color = "black") + 
+  stat_summary(fun = mean, geom = "crossbar",  position= position_dodge(0.75), color = "black") +
+  labs(x = "Number of Matings", y = "ln CFU per Fly", color = "Number of Matings") + 
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "none", axis.text.x = element_text(color = "black", size = 10, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold"))+ scale_x_discrete(labels=c("V"="Virgin","2"="Two Matings","1"="One Mating")) + labs(x="Number of Matings", y="ln CFU per Fly")
+```
+
+# ANOVA and Tukey Comparisons
+```{r}
+library(multcomp)
+BacAll$Num.Mate<-as.factor(BacAll$Num.Mate)
+LoadAll.lm<-lm(ln.CFU.Plus.1~Num.Mate+Round, data=BacAll)
+anova(LoadAll.lm)
+Tukey.LoadAll<-glht(LoadAll.lm, linfct=mcp(Num.Mate="Tukey"))
+summary(Tukey.LoadAll)
+```
+
+
+#### AMP Gene Expression
+
+```{r}
+# Packages
+library(lsmeans)
+library(multcompView)
+library(multcomp)
+library(car)
+library(emmeans)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+library(dplyr)
+library(tidyr)
+```
+Files are either Quantification summaries from BioRad RealTime Detector or csv of the names of each sample in each well on the qPCR plate
+X: Empty
+Well: Position on 96 well plate
+Fluor: Fluoresecent detection used--all SYBR Green
+Target: Empty
+Content: All Unkn
+Sample: Empty
+Cq: Measured gene amplification cycle
+SQ: All NaN
+
+# Multiple Matings Experiments 
+```{r}
+
+# Read in all AMP and RpL files
+TWO_AMP_1<-read.csv("2M_RpL_Att_57_11_7_19 -  Quantification Summary_0.csv")
+TWO_AMP_2<-read.csv("2M_Def_Dipt_57_11_7_19 -  Quantification Summary_0.csv")
+TWO_AMP_3<-read.csv("2M_Cec_57_11_7_19 -  Quantification Summary_0.csv")
+
+TWO_AMP_Names_1<-read.csv("2M_Names_RpL_Att.csv")
+TWO_AMP_Names_2<-read.csv("2M_Names_Def_Dipt.csv")
+TWO_AMP_Names_3<-read.csv("2M_Names_Cec.csv")
+
+
+# Match names and samples
+TWO_AMP_1$Sample<-unlist(data.frame(t(TWO_AMP_Names_1)))
+TWO_AMP_2$Sample<-unlist(data.frame(t(TWO_AMP_Names_2)))
+TWO_AMP_3$Sample<-unlist(data.frame(t(TWO_AMP_Names_3)))
+
+
+# Read in ACTIN Files--joint with the TI samples
+ACTIN<-read.csv("TI_2M_Actin_Techrep_7_21_20 -  Quantification Summary_0.csv")
+ACTIN_Names<-read.csv("2M_TI_Actin_Techrep_Names_7_21_20.csv")
+ACTIN<-ACTIN[,c('Well','Sample','Cq')]
+
+
+# Match names and samples
+ACTIN$Sample<-unlist(data.frame(t(ACTIN_Names)))
+
+# Remove NAs
+ACTIN<- ACTIN[-grep('NaN', ACTIN$Cq),]
+ACTIN<-ACTIN[-grep('D08', ACTIN$Well),]
+
+#Subset to 2M and TI specific data sets
+TWO_ACTIN<-ACTIN[grep('2M:', ACTIN$Sample),]
+TI_ACTIN<-ACTIN[grep('TI:', ACTIN$Sample),]
+
+# Combine all 2M Data Sets
+
+TWO<-rbind(TWO_AMP_1, TWO_AMP_2, TWO_AMP_3)
+TWO<-TWO[,c('Well','Sample','Cq')]
+TWO<-TWO[-grep('NaN', TWO$Cq),]
+TWO<-TWO[-grep('A09', TWO$Well),]
+TWO<-TWO[-grep('B09', TWO$Well),]
+
+TWO<-rbind(TWO, TWO_ACTIN)
+
+# Transform Data
+
+# Add ID to each one--basically removes gene
+TWO$ID<-c('-')
+TWO[grep('2M: 2MI',TWO$Sample),'ID'] <- '2M_2MI'
+TWO[grep('2M: 1MI',TWO$Sample),'ID'] <- '2M_1MI'
+TWO[grep('2M: VI',TWO$Sample),'ID'] <- '2M_VI'
+TWO[grep('2M: 2MU',TWO$Sample),'ID'] <- '2M_2MU'
+TWO[grep('2M: 1MU',TWO$Sample),'ID'] <- '2M_1MU'
+TWO[grep('2M: VU',TWO$Sample),'ID'] <- '2M_VU'
+
+
+# Subset by Gene
+TWO_RP<-TWO[grep('_RpL', TWO$Sample),]
+names(TWO_RP)[3]<-"RpL"
+TWO_Dipt<-TWO[grep('_Dipt', TWO$Sample),]
+names(TWO_Dipt)[3]<-"Dipt"
+TWO_Att<-TWO[grep('_Att', TWO$Sample),]
+names(TWO_Att)[3]<-"Att"
+TWO_Def<-TWO[grep('_Def', TWO$Sample),]
+names(TWO_Def)[3]<-"Def"
+TWO_Cec<-TWO[grep('_Cec', TWO$Sample),]
+names(TWO_Cec)[3]<-"Cec"
+TWO_Actin<-TWO[grep('_Actin', TWO$Sample),]
+names(TWO_Actin)[3]<-"Actin"
+
+# Column bind Gene subsets by ID
+TWO_Actin$Dipt<-TWO_Dipt$Dipt
+TWO_Actin$Att<-TWO_Att$Att
+TWO_Actin$Def<-TWO_Def$Def
+TWO_Actin$Cec<-TWO_Cec$Cec
+
+#B<-cbind(Two_RP, Two_Dipt)
+#C<-merge(as.data.frame(Two_RP), as.data.frame(Two_Dipt), by='row.names', all=TRUE)
+
+TWO_Filter<-TWO_Actin
+
+# Add Mating Status
+TWO_Filter$Mating.Treatment<-c('-')
+TWO_Filter[grep('2M',TWO_Filter$ID),'Mating.Treatment'] <- '2M'
+TWO_Filter[grep('1M',TWO_Filter$ID),'Mating.Treatment'] <- '1M'
+TWO_Filter[grep('V',TWO_Filter$ID),'Mating.Treatment'] <- 'V'
+
+TWO_Filter$Mating.Status<-c('-')
+TWO_Filter[grep('2M',TWO_Filter$ID),'Mating.Status'] <- 'M'
+TWO_Filter[grep('1M',TWO_Filter$ID),'Mating.Status'] <- 'M'
+TWO_Filter[grep('V',TWO_Filter$ID),'Mating.Status'] <- 'V'
+
+
+# Add Infected Status
+TWO_Filter$Infection<-c('-')
+TWO_Filter[grep('U_',TWO_Filter$Sample),'Infection'] <- 'U'
+TWO_Filter[grep('I_',TWO_Filter$Sample),'Infection'] <- 'I'
+```
+
+# Multiple Matings Diptericin comparisons
+
+```{r}
+#### 2M: Simple Model for each AMP ####
+#Y = u + Actin + Mating.Treatment + Infection + Mating.Treatment x Infection
+
+# Diptericin Model
+
+DIP_ls<- lm(Dipt~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TWO_Filter)
+anova(DIP_ls)
+
+#Analysis of Variance Table
+
+#Response: Dipt
+#Df  Sum Sq Mean Sq F value    Pr(>F)    
+#Actin                       1 105.083 105.083 51.5695 1.587e-07 ***
+#  Mating.Treatment            2   0.609   0.304  0.1494    0.8620    
+#Infection                   1 193.508 193.508 94.9641 5.387e-10 ***
+#  Mating.Treatment:Infection  2   3.989   1.995  0.9788    0.3897    
+#Residuals                  25  50.942   2.038                      
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+# Extract Least Squared Means from model
+marginal.1 = lsmeans(DIP_ls, ~ Mating.Treatment:Infection) # extracts least square means
+
+
+CLD_Dipt<- cld(marginal.1,
+               alpha=0.05,
+               Letters=letters,
+               adjust="tukey") # compact letter display and correction
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#1M               I           22.7 0.605 25     21.0     24.4  a    
+#V                I           23.2 0.517 25     21.7     24.7  a    
+#2M               I           23.5 0.542 25     21.9     25.0  a    
+#2M               U           28.5 0.894 25     26.0     31.1   b   
+#1M               U           28.9 0.869 25     26.4     31.4   b   
+#V                U           30.2 0.830 25     27.8     32.6   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 6 estimates 
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05   
+
+
+# Subtracts LS Means: Infected-Uninfected
+two_dipt_pairs<-update(pairs(marginal.1, by= "Mating.Treatment"), by=NULL)
+summary(two_dipt_pairs)
+two_pairs_dipt_CLD<- cld(two_dipt_pairs,
+                         alpha=0.05,
+                         Letters=letters,
+                         adjust="tukey")
+two_pairs_dipt_CLD
+
+#contrast Mating.Treatment estimate    SE df t.ratio p.value .group  pos gene      
+#I - U    V                   -7.03 0.967 25 -7.272  <.0001   a     7.03 Diptericin
+#I - U    1M                  -6.18 1.143 25 -5.409  <.0001   a     6.18 Diptericin
+#I - U    2M                  -5.04 1.063 25 -4.740  0.0001   a     5.04 Diptericin
+
+#P value adjustment: tukey method for comparing a family of 3 estimates 
+#significance level used: alpha = 0.05 
+
+
+# Plot the Infected-Uninfected least squared means estimates
+two_pairs_dipt_CLD$pos<-(-two_pairs_dipt_CLD$estimate)
+
+two_pairs_dipt_CLD$gene<-"Diptericin"
+
+two_pairs_dipt_CLD$Mating.Treatment<-factor(two_pairs_dipt_CLD$Mating.Treatment, levels=c("V","1M","2M"))
+mycolors<- c("grey23","#D65108", "steelblue2")
+
+ggplot(two_pairs_dipt_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"="Virgin","1M"="One Mating","2M"="Two Matings")) +
+  labs(x="Number of Matings", y="Diptericin Gene Expression (log 2)")
+```
+# Multiple Mating Defensin Comparisons
+
+```{r}
+# Defensin Model
+
+DEF_ls<- lm(Def~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TWO_Filter)
+anova(DEF_ls)
+
+#Analysis of Variance Table
+
+#Response: Def
+#                           Df Sum Sq Mean Sq F value    Pr(>F)    
+#Actin                       1 18.625 18.6255  9.8693 0.0042866 ** 
+#Mating.Treatment            2 37.089 18.5444  9.8264 0.0007098 ***
+#Infection                   1  0.286  0.2861  0.1516 0.7002891    
+#Mating.Treatment:Infection  2  1.363  0.6815  0.3611 0.7004732    
+#Residuals                  25 47.180  1.8872                      
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# Defensin Least Squared Means
+marginal.2 = lsmeans(DEF_ls, ~ Mating.Treatment:Infection)
+
+CLD_DEF<- cld(marginal.2,
+              alpha=0.05,
+              Letters=letters,
+              adjust="tukey")
+#CLD_DEF
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#2M               I           24.3 0.522 25     22.8     25.8  a    
+#2M               U           25.2 0.860 25     22.8     27.7  ab   
+#1M               I           25.3 0.582 25     23.6     26.9  ab   
+#1M               U           25.6 0.836 25     23.2     28.0  ab   
+#V                U           27.0 0.799 25     24.8     29.3  ab   
+#V                I           27.3 0.497 25     25.9     28.7   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 6 estimates 
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05 
+
+#### 2M Defensin Comparisons ####
+# Subtracts LS Means: Infected-Uninfected
+two_def_pairs<-update(pairs(marginal.2, by= "Mating.Treatment"), by=NULL)
+summary(two_def_pairs)
+two_pairs_def_CLD<- cld(two_def_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+
+two_pairs_def_CLD
+#contrast Mating.Treatment estimate   SE df t.ratio p.value .group
+#I - U    2M                 -0.908 1.02 25 -0.887  0.3833   a    
+#I - U    1M                 -0.300 1.10 25 -0.272  0.7875   a    
+#I - U    V                   0.264 0.93 25  0.283  0.7792   a    
+
+#P value adjustment: tukey method for comparing a family of 3 estimates 
+#significance level used: alpha = 0.05 
+
+
+two_pairs_def_CLD$pos<-(-two_pairs_def_CLD$estimate)
+
+two_pairs_def_CLD$gene<-"Defensin"
+
+two_pairs_def_CLD$Mating.Treatment<-factor(two_pairs_def_CLD$Mating.Treatment, levels=c("V","1M","2M"))
+mycolors<- c("grey23","#D65108", "steelblue2")
+
+ggplot(two_pairs_def_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"="Virgin","1M"="One Mating","2M"="Two Matings")) +
+  labs(x="Number of Matings", y="Defensin Gene Expression (log 2)")
+
+#### 2M Def log2 Issues ####
+# The virgin uninfected expressed at higher level (lower Cq) than the virgin infected. 
+# So the value is negative, which you cannot take a log2 negative
+# So I am going to rewrite the value of the V in two_pairs_def_CLD as zero
+
+two_pairs_def_rewrite<-two_pairs_def_CLD
+two_pairs_def_rewrite$pos[3]<- 0.264
+
+
+ggplot(two_pairs_def_rewrite,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) +
+  geom_errorbar(aes(ymin=pos+SE, ymax=pos-SE), width=.2,
+                position=position_dodge(.9)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"="Virgin","1M"="One Mating","2M"="Two Matings")) +
+  labs(x="Number of Matings", y="Defensin Gene Expression (log 2)")
+ggsave("REWRITE_2M_Def_Pairs.pdf")
+```
+
+# Mulitple Matings Attacin Comparisons
+```{r}
+# Attacin Model
+ATT_ls<- lm(Att~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TWO_Filter)
+anova(ATT_ls)
+
+#Analysis of Variance Table
+
+#Response: Att
+#                           Df  Sum Sq Mean Sq F value    Pr(>F)    
+#Actin                       1  56.801  56.801 26.1816 2.756e-05 ***
+#Mating.Treatment            2   0.844   0.422  0.1946    0.8244    
+#Infection                   1 173.054 173.054 79.7663 2.981e-09 ***
+#Mating.Treatment:Infection  2  74.002  37.001 17.0549 2.131e-05 ***
+#Residuals                  25  54.238   2.170                      
+#---
+ # Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# Attacin Least Squared Means
+marginal.3 = lsmeans(ATT_ls, ~ Mating.Treatment:Infection)
+
+CLD_ATT<- cld(marginal.3,
+              alpha=0.05,
+              Letters=letters,
+              adjust="tukey")
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#V                I           23.4 0.533 25     21.8     24.9  a    
+#1M               I           24.4 0.624 25     22.6     26.2  ab   
+#2M               I           25.9 0.560 25     24.3     27.5   bc  
+#2M               U           27.3 0.922 25     24.7     30.0   bc  
+#1M               U           28.5 0.897 25     25.9     31.0    c  
+#V                U           33.4 0.856 25     30.9     35.8     d 
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 6 estimates 
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05
+
+### 2M Attacin Pairs ####
+two_att_pairs<-update(pairs(marginal.3, by= "Mating.Treatment"), by=NULL)
+summary(two_att_pairs)
+two_pairs_att_CLD<- cld(two_att_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+two_pairs_att_CLD
+
+#contrast Mating.Treatment estimate    SE df t.ratio p.value .group
+#I - U    V                  -10.03 0.997 25 -10.053 <.0001   a    
+#I - U    1M                  -4.05 1.179 25  -3.434 0.0021    b   
+#I - U    2M                  -1.42 1.097 25  -1.296 0.2067    b   
+
+#P value adjustment: tukey method for comparing a family of 3 estimates 
+#significance level used: alpha = 0.05 
+
+two_pairs_att_CLD$pos<-(-two_pairs_att_CLD$estimate)
+
+two_pairs_att_CLD$gene<-"Attacin"
+
+two_pairs_att_CLD$Mating.Treatment<-factor(two_pairs_att_CLD$Mating.Treatment, levels=c("V","1M","2M"))
+mycolors<- c("grey23","#D65108", "steelblue2")
+
+ggplot(two_pairs_att_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"="Virgin","1M"="One Mating","2M"="Two Matings")) +
+  labs(x="Number of Matings", y="Attacin Gene Expression (log 2)")
+ggsave("NEW_2M_Att_Pairs.pdf")
+```
+
+# Multiple Matings Cecropin Comparisons
+```{r}
+# Cecropin Model
+
+CEC_ls<- lm(Cec~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TWO_Filter)
+anova(CEC_ls)
+
+#Analysis of Variance Table
+
+#Response: Cec
+#Df  Sum Sq Mean Sq F value    Pr(>F)    
+#Actin                       1 110.657 110.657  73.751 6.298e-09 ***
+ # Mating.Treatment            2   8.240   4.120   2.746  0.083549 .  
+#Infection                   1 196.518 196.518 130.975 1.971e-11 ***
+#  Mating.Treatment:Infection  2  19.793   9.897   6.596  0.005007 ** 
+#  Residuals                  25  37.511   1.500                      
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# Cecropin Least Squared Means
+marginal.4 = lsmeans(CEC_ls, ~ Mating.Treatment:Infection)
+
+CLD_CEC<- cld(marginal.4,
+              alpha=0.05,
+              Letters=letters,
+              adjust="tukey")
+CLD_CEC
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#1M               I           24.9 0.519 25     23.4     26.3  a    
+#2M               I           24.9 0.465 25     23.6     26.3  a    
+#V                I           25.3 0.444 25     24.0     26.5  a    
+#2M               U           29.2 0.767 25     27.0     31.4   b   
+#1M               U           29.7 0.746 25     27.5     31.8   b   
+#V                U           33.8 0.712 25     31.7     35.8    c  
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 6 estimates 
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05 
+
+# Cecropin Plots of LS Means
+ggplot(CLD_CEC,
+       aes(x     = Mating.Treatment:Infection,
+           y     = lsmean,
+           label = .group)) +
+  
+  geom_bar(stat="identity") +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) +
+  labs(x="Contrast", y="Cecropin LSMeans Comparisons")
+
+
+
+#### 2M Cecropin Pairs ####
+two_cec_pairs<-update(pairs(marginal.4, by= "Mating.Treatment"), by=NULL)
+summary(two_cec_pairs)
+two_pairs_cec_CLD<- cld(two_cec_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+
+#contrast Mating.Treatment estimate    SE df t.ratio p.value .group  pos gene    
+#I - U    V                   -8.50 0.829 25 -10.250 <.0001   a     8.50 Cecropin
+#I - U    1M                  -4.79 0.980 25  -4.881 0.0001    b    4.79 Cecropin
+#I - U    2M                  -4.26 0.913 25  -4.663 0.0001    b    4.26 Cecropin
+
+#P value adjustment: tukey method for comparing a family of 3 estimates 
+#significance level used: alpha = 0.05 
+
+two_pairs_cec_CLD$pos<-(-two_pairs_cec_CLD$estimate)
+
+two_pairs_cec_CLD$gene<-"Cecropin"
+
+two_pairs_cec_CLD$Mating.Treatment<-factor(two_pairs_cec_CLD$Mating.Treatment, levels=c("V","1M","2M"))
+mycolors<- c("grey23","#D65108", "steelblue2")
+
+ggplot(two_pairs_cec_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"="Virgin","1M"="One Mating","2M"="Two Matings")) +
+  labs(x="Number of Matings", y="Cecropin Gene Expression (log 2)")
+ggsave("NEW_2M_Cec_Pairs.pdf")
+```
+
+
+
+# Multiple Matings AMP Composite Graph
+```{r}
+
+#### 2M Composite Pairs ####
+two_pairs<-rbind(two_pairs_dipt_CLD, two_pairs_def_CLD, two_pairs_att_CLD, two_pairs_cec_CLD)
+two_pairs$pos[6]<- 0.2636037
+two_pairs$log2<-log2(two_pairs$pos)
+two_pairs$gene<-factor(two_pairs$gene, levels=c("Attacin","Cecropin","Diptericin", "Defensin"))
+
+
+ggplot(two_pairs,
+       aes( x= gene,
+            y= log2,
+            fill=Mating.Treatment)) +
+  scale_color_manual(values = mycolors) + 
+  scale_fill_manual(values = mycolors) +
+  geom_col(position = "dodge", width= 0.5) +
+  geom_errorbar(aes(ymin=log2-SE, ymax=log2+SE), width=.2,
+                position=position_dodge(0.5)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"="Virgin","1M"="One Mating","2M"="Two Matings")) +
+  labs(x="Gene", y="Infection Induced AMP Expression (log 2)")
+ggsave("NEW_2M_Composite_Pairs.pdf")
+```
+# Persistence Experiments
+
+```{r}
+#### TI Files ####
+# Read in all files
+TI_AMP_1<-read.csv("TI_Dipt_11_10_19 -  Quantification Summary_0.csv")
+TI_AMP_2<-read.csv("TI_Def_11_10_19 -  Quantification Summary_0.csv")
+TI_AMP_3<-read.csv("TI_Att_11_11_19 -  Quantification Summary_0.csv")
+TI_AMP_4<-read.csv("TI_Cec_11_11_19 -  Quantification Summary_0.csv")
+
+
+TI_AMP_Names_1<-read.csv("TI_Names_Dipt.csv")
+TI_AMP_Names_2<-read.csv("TI_Names_Def.csv")
+TI_AMP_Names_3<-read.csv("TI_Names_Att.csv")
+TI_AMP_Names_4<-read.csv("TI_Names_Cec.csv")
+
+
+# Match names and samples
+TI_AMP_1$Sample<-unlist(data.frame(t(TI_AMP_Names_1)))
+TI_AMP_2$Sample<-unlist(data.frame(t(TI_AMP_Names_2)))
+TI_AMP_3$Sample<-unlist(data.frame(t(TI_AMP_Names_3)))
+TI_AMP_4$Sample<-unlist(data.frame(t(TI_AMP_Names_4)))
+
+
+
+# Read in ACTIN Files--joint with the 2 Matings samples
+TI_ACTIN<-ACTIN[grep('TI:', ACTIN$Sample),]
+
+# Combine all TI Data Sets
+TI_AMP_1<-TI_AMP_1[,c('Well','Sample','Cq')]
+TI_AMP_2<-TI_AMP_2[,c('Well','Sample','Cq')]
+TI_AMP_3<-TI_AMP_3[,c('Well','Sample','Cq')]
+TI_AMP_4<-TI_AMP_4[,c('Well','Sample','Cq')]
+
+
+
+TI<-rbind(TI_AMP_1, TI_AMP_2, TI_AMP_3, TI_AMP_4)
+TI<-TI[grep('TI:', TI$Sample),]
+#TI<-TI[-grep('NaN', TI$Cq),]
+#TI<-TI[-grep('D08', TI$Well),]
+
+
+TI<-rbind(TI, TI_ACTIN)
+
+# Transform Data
+
+# Add ID to each one--basically removes gene
+TI$ID<-c('-')
+TI[grep('TI: 10I',TI$Sample),'ID'] <- 'TI_10I'
+TI[grep('TI: 10U',TI$Sample),'ID'] <- 'TI_10U'
+TI[grep('TI: 7I',TI$Sample),'ID'] <- 'TI_7I'
+TI[grep('TI: 7U',TI$Sample),'ID'] <- 'TI_7U'
+TI[grep('TI: 4I',TI$Sample),'ID'] <- 'TI_4I'
+TI[grep('TI: 4U',TI$Sample),'ID'] <- 'TI_4U'
+TI[grep('TI: 2I',TI$Sample),'ID'] <- 'TI_2I'
+TI[grep('TI: 2U',TI$Sample),'ID'] <- 'TI_2U'
+TI[grep('TI: VI',TI$Sample),'ID'] <- 'TI_VI'
+TI[grep('TI: VU',TI$Sample),'ID'] <- 'TI_VU'
+
+
+# Subset by Gene
+TI_Actin<-TI[grep('_Actin', TI$Sample),]
+names(TI_Actin)[3]<-"Actin"
+TI_Dipt<-TI[grep('_Dipt', TI$Sample),]
+names(TI_Dipt)[3]<-"Dipt"
+TI_Att<-TI[grep('_Att', TI$Sample),]
+names(TI_Att)[3]<-"Att"
+TI_Def<-TI[grep('_Def', TI$Sample),]
+names(TI_Def)[3]<-"Def"
+TI_Cec<-TI[grep('_Cec', TI$Sample),]
+names(TI_Cec)[3]<-"Cec"
+
+# Column bind Gene subsets by ID
+TI_Actin$Dipt<-TI_Dipt$Dipt
+TI_Actin$Att<-TI_Att$Att
+TI_Actin$Def<-TI_Def$Def
+TI_Actin$Cec<-TI_Cec$Cec
+
+#B<-cbind(Two_RP, Two_Dipt)
+#C<-merge(as.data.frame(Two_RP), as.data.frame(Two_Dipt), by='row.names', all=TRUE)
+
+TI_Filter<-TI_Actin
+
+# Add Mating Status
+TI_Filter$Mating.Treatment<-c('-')
+TI_Filter[grep('_10I',TI_Filter$ID),'Mating.Treatment'] <- '10M'
+TI_Filter[grep('_10U',TI_Filter$ID),'Mating.Treatment'] <- '10M'
+
+TI_Filter[grep('_7I',TI_Filter$ID),'Mating.Treatment'] <- '7M'
+TI_Filter[grep('_7U',TI_Filter$ID),'Mating.Treatment'] <- '7M'
+
+
+TI_Filter[grep('_4I',TI_Filter$ID),'Mating.Treatment'] <- '4M'
+TI_Filter[grep('_4U',TI_Filter$ID),'Mating.Treatment'] <- '4M'
+
+TI_Filter[grep('_2I',TI_Filter$ID),'Mating.Treatment'] <- '2M'
+TI_Filter[grep('_2U',TI_Filter$ID),'Mating.Treatment'] <- '2M'
+
+TI_Filter[grep('_VI',TI_Filter$ID),'Mating.Treatment'] <- 'V'
+TI_Filter[grep('_VU',TI_Filter$ID),'Mating.Treatment'] <- 'V'
+
+
+TI_Filter$Mating.Status<-c('-')
+TI_Filter[grep('_10I',TI_Filter$ID),'Mating.Status'] <- 'M'
+TI_Filter[grep('_10U',TI_Filter$ID),'Mating.Status'] <- 'M'
+
+
+TI_Filter[grep('_7I',TI_Filter$ID),'Mating.Status'] <- 'M'
+TI_Filter[grep('_7U',TI_Filter$ID),'Mating.Status'] <- 'M'
+
+
+TI_Filter[grep('_4I',TI_Filter$ID),'Mating.Status'] <- 'M'
+TI_Filter[grep('_4U',TI_Filter$ID),'Mating.Status'] <- 'M'
+
+TI_Filter[grep('_2I',TI_Filter$ID),'Mating.Status'] <- 'M'
+TI_Filter[grep('_2U',TI_Filter$ID),'Mating.Status'] <- 'M'
+
+
+TI_Filter[grep('_VI',TI_Filter$ID),'Mating.Status'] <- 'V'
+TI_Filter[grep('_VU',TI_Filter$ID),'Mating.Status'] <- 'V'
+
+
+# Add Infected Status
+TI_Filter$Infection<-c('-')
+TI_Filter[grep('_10U',TI_Filter$ID),'Infection'] <- 'U'
+TI_Filter[grep('_10I',TI_Filter$ID),'Infection'] <- 'I'
+
+TI_Filter[grep('_7U',TI_Filter$ID),'Infection'] <- 'U'
+TI_Filter[grep('_7I',TI_Filter$ID),'Infection'] <- 'I'
+
+TI_Filter[grep('_4U',TI_Filter$ID),'Infection'] <- 'U'
+TI_Filter[grep('_4I',TI_Filter$ID),'Infection'] <- 'I'
+
+TI_Filter[grep('_2U',TI_Filter$ID),'Infection'] <- 'U'
+TI_Filter[grep('_2I',TI_Filter$ID),'Infection'] <- 'I'
+
+TI_Filter[grep('_VU',TI_Filter$ID),'Infection'] <- 'U'
+TI_Filter[grep('_VI',TI_Filter$ID),'Infection'] <- 'I'
+```
+# Persistence Diptericin Comparisons
+```{r}
+##### TI Diptericin Model ####
+TI_DIP_ls<- lm(Dipt~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TI_Filter)
+anova(TI_DIP_ls)
+
+
+#Analysis of Variance Table
+
+#Response: Dipt
+                            #Df  Sum Sq Mean Sq  F value    Pr(>F)    
+#Actin                       1   45.50   45.50  12.4242 0.0009428 ***
+# Mating.Treatment            4   10.11    2.53   0.6899 0.6025580    
+#Infection                   1 1509.52 1509.52 412.1609 < 2.2e-16 ***
+# Mating.Treatment:Infection  4    8.69    2.17   0.5932 0.6692516    
+#Residuals                  48  175.80    3.66                       
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+# DIP ls means 
+marginal.1.1 = lsmeans(TI_DIP_ls, ~ Mating.Treatment:Infection)
+
+TI_CLD_Dipt<- cld(marginal.1.1,
+                  alpha=0.05,
+                  Letters=letters,
+                  adjust="tukey")
+TI_CLD_Dipt
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#10M              I           19.4 0.799 48     17.0     21.7  a    
+#7M               I           19.9 0.802 48     17.5     22.2  a    
+#4M               I           20.0 0.788 48     17.7     22.4  a    
+#V                I           20.5 0.801 48     18.1     22.8  a    
+#2M               I           21.0 0.941 48     18.2     23.8  a    
+#7M               U           29.4 0.806 48     27.0     31.7   b   
+#4M               U           29.5 0.792 48     27.2     31.8   b   
+#V                U           30.8 0.916 48     28.1     33.5   b   
+#10M              U           30.9 0.781 48     28.6     33.2   b   
+#2M               U           31.0 0.782 48     28.7     33.3   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 10 estimates 
+#P value adjustment: tukey method for comparing a family of 10 estimates 
+#significance level used: alpha = 0.05 
+
+#### TI Dipt Comparisons ####
+
+ti_dipt_pairs<-update(pairs(marginal.1.1, by= "Mating.Treatment"), by=NULL)
+summary(ti_dipt_pairs)
+ti_pairs_dipt_CLD<- cld(ti_dipt_pairs,
+                         alpha=0.05,
+                         Letters=letters,
+                         adjust="tukey")
+ti_pairs_dipt_CLD
+
+ti_pairs_dipt_CLD$pos<-(-ti_pairs_dipt_CLD$estimate)
+
+ti_pairs_dipt_CLD$gene<-"Diptericin"
+
+ti_pairs_dipt_CLD$Mating.Treatment<-factor(ti_pairs_dipt_CLD$Mating.Treatment, levels=c("V","2M","4M", "7M", "10M"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57")
+
+ggplot(ti_pairs_dipt_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"= "Virgin", "2M"=  "2 Days", "4M"= "4 Days", "7M"= "7 Days", "10M" ="10 Days")) +
+  labs(x="Days Between Mating and Infection", y="Diptericin Gene Expression (log 2)")
+ggsave("NEW_TI_Dipt_Diff.pdf")
+```
+# Persistence Defensin Comparisons
+```{r}
+# Defensin Model
+### TI Defensin ####
+TI_DEF_ls<- lm(Def~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TI_Filter)
+anova(TI_DEF_ls)
+
+#Analysis of Variance Table
+
+#Response: Def
+#                           Df Sum Sq Mean Sq  F value Pr(>F)    
+#Actin                       1   0.07    0.07   0.0422 0.8382    
+#Mating.Treatment            4   2.93    0.73   0.4647 0.7613    
+#Infection                   1 368.13  368.13 233.1595 <2e-16 ***
+#Mating.Treatment:Infection  4   6.60    1.65   1.0456 0.3937    
+#Residuals                  48  75.79    1.58                    
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# DEF ls means
+marginal.2.2 = lsmeans(TI_DEF_ls, ~ Mating.Treatment:Infection)
+
+TI_CLD_DEF<- cld(marginal.2.2,
+                 alpha=0.05,
+                 Letters=letters,
+                 adjust="tukey")
+TI_CLD_DEF
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#4M               I           20.7 0.517 48     19.1     22.2  a    
+#2M               I           21.4 0.618 48     19.6     23.2  a    
+#10M              I           21.4 0.525 48     19.9     22.9  a    
+#7M               I           21.6 0.526 48     20.1     23.2  a    
+#V                I           21.9 0.526 48     20.4     23.5  a    
+#10M              U           25.6 0.513 48     24.1     27.1   b   
+#7M               U           26.4 0.529 48     24.9     28.0   b   
+#V                U           26.5 0.602 48     24.7     28.3   b   
+#4M               U           26.7 0.520 48     25.2     28.2   b   
+#2M               U           26.8 0.514 48     25.3     28.3   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 10 estimates 
+#P value adjustment: tukey method for comparing a family of 10 estimates 
+#significance level used: alpha = 0.05  
+
+
+##### TI Defensin Comparisons ####
+ti_def_pairs<-update(pairs(marginal.2.2, by= "Mating.Treatment"), by=NULL)
+summary(ti_def_pairs)
+ti_pairs_def_CLD<- cld(ti_def_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+ti_pairs_def_CLD
+
+#contrast Mating.Treatment estimate    SE df t.ratio p.value .group
+#I - U    4M                  -6.06 0.742 48 -8.172  <.0001   a    
+#I - U    2M                  -5.41 0.793 48 -6.820  <.0001   a    
+#I - U    7M                  -4.80 0.767 48 -6.258  <.0001   a    
+#I - U    V                   -4.55 0.767 48 -5.935  <.0001   a    
+#I - U    10M                 -4.16 0.735 48 -5.665  <.0001   a    
+
+#P value adjustment: tukey method for comparing a family of 5 estimates 
+#significance level used: alpha = 0.05 
+
+
+ti_pairs_def_CLD$pos<-(-ti_pairs_def_CLD$estimate)
+
+ti_pairs_def_CLD$gene<-"Defensin"
+
+ti_pairs_def_CLD$Mating.Treatment<-factor(ti_pairs_def_CLD$Mating.Treatment, levels=c("V","2M","4M", "7M", "10M"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57")
+
+ggplot(ti_pairs_def_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"= "Virgin", "2M"=  "2 Days", "4M"= "4 Days", "7M"= "7 Days", "10M" ="10 Days")) +
+  labs(x="Days Between Mating and Infection", y="Defensin Gene Expression (log 2)")
+ggsave("NEW_TI_Def_Diff.pdf")
+```
+# Persistence Attacin Comparisons
+```{r}
+#### TI Attacin Model ####
+TI_ATT_ls<- lm(Att~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TI_Filter)
+anova(TI_ATT_ls)
+
+#Analysis of Variance Table
+
+#Response: Att
+#                            Df Sum Sq Mean Sq  F value    Pr(>F)    
+#Actin                       1  90.49   90.49  49.2503 6.904e-09 ***
+#Mating.Treatment            4   9.39    2.35   1.2774    0.2920    
+#Infection                   1 754.38  754.38 410.5933 < 2.2e-16 ***
+#Mating.Treatment:Infection  4   2.83    0.71   0.3846    0.8186    
+#Residuals                  48  88.19    1.84                       
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+# ATT ls means
+marginal.3.3 = lsmeans(TI_ATT_ls, ~ Mating.Treatment:Infection)
+
+TI_CLD_ATT<- cld(marginal.3.3,
+                 alpha=0.05,
+                 Letters=letters,
+                 adjust="tukey")
+TI_CLD_ATT
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#4M               I           22.1 0.558 48     20.5     23.8  a    
+#2M               I           22.4 0.666 48     20.5     24.4  a    
+#7M               I           22.5 0.568 48     20.8     24.1  a    
+#10M              I           22.8 0.566 48     21.1     24.4  a    
+#V                I           22.8 0.567 48     21.1     24.5  a    
+#7M               U           28.9 0.571 48     27.2     30.6   b   
+#4M               U           29.0 0.561 48     27.3     30.6   b   
+#2M               U           29.8 0.554 48     28.2     31.4   b   
+#V                U           30.4 0.649 48     28.5     32.3   b   
+#10M              U           30.4 0.553 48     28.8     32.0   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 10 estimates 
+#P value adjustment: tukey method for comparing a family of 10 estimates 
+#significance level used: alpha = 0.05  
+
+#### TI Attacin Comparisons ####
+
+
+ti_att_pairs<-update(pairs(marginal.3.3, by= "Mating.Treatment"), by=NULL)
+summary(ti_att_pairs)
+ti_pairs_att_CLD<- cld(ti_att_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+ti_pairs_att_CLD
+#contrast Mating.Treatment estimate    SE df t.ratio p.value .group
+#I - U    10M                 -7.63 0.793 48 -9.618  <.0001   a    
+#I - U    V                   -7.55 0.828 48 -9.116  <.0001   a    
+#I - U    2M                  -7.39 0.856 48 -8.636  <.0001   a    
+#I - U    4M                  -6.86 0.800 48 -8.574  <.0001   a    
+#I - U    7M                  -6.41 0.827 48 -7.754  <.0001   a    
+
+#P value adjustment: tukey method for comparing a family of 5 estimates 
+#significance level used: alpha = 0.05 
+
+
+ti_pairs_att_CLD$pos<-(-ti_pairs_att_CLD$estimate)
+
+ti_pairs_att_CLD$gene<-"Attacin"
+
+ti_pairs_att_CLD$Mating.Treatment<-factor(ti_pairs_att_CLD$Mating.Treatment, levels=c("V","2M","4M", "7M", "10M"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57")
+
+ggplot(ti_pairs_att_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"= "Virgin", "2M"=  "2 Days", "4M"= "4 Days", "7M"= "7 Days", "10M" ="10 Days")) +
+  labs(x="Days Between Mating and Infection", y="Attacin Gene Expression (log 2)")
+ggsave("NEW_TI_Att_Diff.pdf")
+```
+# Persistence Cecropin Comparisons
+```{r}
+##### TI  Cecropin Model ####
+TI_CEC_ls<- lm(Cec~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=TI_Filter)
+anova(TI_CEC_ls)
+
+#Analysis of Variance Table
+
+#Response: Cec
+#                           Df  Sum Sq Mean Sq  F value    Pr(>F)    
+#Actin                       1  128.85  128.85  55.8473 1.573e-09 ***
+#Mating.Treatment            4   11.43    2.86   1.2381    0.3077    
+#Infection                   1 1343.84 1343.84 582.4597 < 2.2e-16 ***
+#Mating.Treatment:Infection  4   11.73    2.93   1.2706    0.2949    
+#Residuals                  47  108.44    2.31                       
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+marginal.4.4 = lsmeans(TI_CEC_ls, ~ Mating.Treatment:Infection)
+
+TI_CLD_CEC<- cld(marginal.4.4,
+                 alpha=0.05,
+                 Letters=letters,
+                 adjust="tukey")
+TI_CLD_CEC
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#2M               I           21.0 0.746 47     18.8     23.2  a    
+#4M               I           22.0 0.683 47     20.0     24.0  a    
+#10M              I           22.3 0.635 47     20.5     24.2  a    
+#7M               I           22.3 0.637 47     20.5     24.2  a    
+#V                I           22.4 0.636 47     20.5     24.3  a    
+#7M               U           30.5 0.639 47     28.6     32.3   b   
+#4M               U           30.8 0.628 47     29.0     32.7   b   
+#2M               U           31.5 0.621 47     29.7     33.4   b   
+#V                U           32.7 0.728 47     30.5     34.8   b   
+#10M              U           32.8 0.620 47     30.9     34.6   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 10 estimates 
+#P value adjustment: tukey method for comparing a family of 10 estimates 
+#significance level used: alpha = 0.05 
+
+#### TI Cec Comparisons ####
+ti_cec_pairs<-update(pairs(marginal.4.4, by= "Mating.Treatment"), by=NULL)
+summary(ti_cec_pairs)
+ti_pairs_cec_CLD<- cld(ti_cec_pairs,
+                       alpha=0.05,
+                       Letters=letters,
+                       adjust="tukey")
+
+ti_pairs_cec_CLD
+#contrast Mating.Treatment estimate    SE df t.ratio p.value .group
+#I - U    2M                 -10.52 0.959 47 -10.974 <.0001   a    
+#I - U    10M                -10.43 0.889 47 -11.737 <.0001   a    
+#I - U    V                  -10.24 0.928 47 -11.042 <.0001   a    
+#I - U    4M                  -8.84 0.936 47  -9.445 <.0001   a    
+#I - U    7M                  -8.12 0.927 47  -8.754 <.0001   a    
+
+#P value adjustment: tukey method for comparing a family of 5 estimates 
+#significance level used: alpha = 0.05 
+
+
+ti_pairs_cec_CLD$pos<-(-ti_pairs_cec_CLD$estimate)
+
+ti_pairs_cec_CLD$gene<-"Cecropin"
+
+ti_pairs_cec_CLD$Mating.Treatment<-factor(ti_pairs_cec_CLD$Mating.Treatment, levels=c("V","2M","4M", "7M", "10M"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57")
+
+ggplot(ti_pairs_cec_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"= "Virgin", "2M"=  "2 Days", "4M"= "4 Days", "7M"= "7 Days", "10M" ="10 Days")) +
+  labs(x="Days Between Mating and Infection", y="Cecropin Gene Expression (log 2)")
+ggsave("NEW_TI_Cec_Diff.pdf")
+```
+# Persistence AMP Composite Graph
+```{r}
+#### TI Composite Graph ####
+ti_pairs<-rbind(ti_pairs_dipt_CLD, ti_pairs_def_CLD, ti_pairs_att_CLD, ti_pairs_cec_CLD)
+ti_pairs$gene<-factor(ti_pairs$gene, levels=c("Attacin","Cecropin","Diptericin", "Defensin"))
+
+ggplot(ti_pairs,
+       aes( x= gene,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_col(position = "dodge", width= 0.5) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(0.5)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("V"= "Virgin", "2M"=  "2 Days", "4M"= "4 Days", "7M"= "7 Days", "10M" ="10 Days")) +
+  labs(x="Gene", y="Infection Induced AMP Expression (log 2)")
+ggsave("NEW_TI_Composite_Pairs.pdf")
+```
+# Aging AMP Expression
+Similar structure to other gene expression analyses above
+
+```{r}
+# packages
+library(lsmeans)
+library(multcompView)
+library(multcomp)
+library(car)
+library(emmeans)
+library(ggplot2)
+library(scales)
+library(ggrepel)
+library(dplyr)
+library(tidyr)
+```
+
+```{r}
+#### Data Files ####
+# Read in all AMP and Actin
+AGE_Actin<-read.csv("Aging_Actin_12_08_20 -  Quantification Summary_0.csv")
+AGE_Dipt<-read.csv("Aging_Dipt_12_09_20 -  Quantification Summary_0 (1).csv")
+AGE_Att<-read.csv("Aging_Att_12_09_20 -  Quantification Summary_0.csv")
+AGE_Def<-read.csv("Aging_Def_12_10_20 -  Quantification Summary_0.csv")
+AGE_Cec<-read.csv("Aging_Cec_12_10_20 -  Quantification Summary_0.csv")
+
+AGE_Actin_Name<-read.csv("Aging_Actin_Names.csv")
+AGE_Dipt_Name<-read.csv("Aging_Dipt_Names.csv")
+AGE_Att_Name<-read.csv("Aging_Att_Names.csv")
+AGE_Def_Name<-read.csv("Aging_Def_Names.csv")
+AGE_Cec_Name<-read.csv("Aging_Cec_Names.csv")
+
+# Match names and samples
+AGE_Actin$Sample<-unlist(data.frame(t(AGE_Actin_Name)))
+AGE_Dipt$Sample<-unlist(data.frame(t(AGE_Dipt_Name)))
+AGE_Att$Sample<-unlist(data.frame(t(AGE_Att_Name)))
+AGE_Def$Sample<-unlist(data.frame(t(AGE_Def_Name)))
+AGE_Cec$Sample<-unlist(data.frame(t(AGE_Cec_Name)))
+
+
+# Combine all sets into one?
+AGE<-rbind(AGE_Actin, AGE_Dipt, AGE_Att, AGE_Def, AGE_Cec)
+AGE<-AGE[-grep('NaN', AGE$Cq),]
+AGE<-AGE[,c('Well','Sample','Cq')]
+
+# Add ID to each one--basically removes gene
+AGE$ID<-c('-')
+
+AGE[grep('4M_I_',AGE$Sample),'ID'] <- '4M_I'
+AGE[grep('4M_S_',AGE$Sample),'ID'] <- '4M_S'
+AGE[grep('4V_I_',AGE$Sample),'ID'] <- '4V_I'
+AGE[grep('4V_S_',AGE$Sample),'ID'] <- '4V_S'
+
+AGE[grep('14M_I_',AGE$Sample),'ID'] <- '14M_I'
+AGE[grep('14M_S_',AGE$Sample),'ID'] <- '14M_S'
+AGE[grep('14V_I_',AGE$Sample),'ID'] <- '14V_I'
+AGE[grep('14V_S_',AGE$Sample),'ID'] <- '14V_S'
+
+AGE[grep('8M_I_',AGE$Sample),'ID'] <- '8M_I'
+AGE[grep('8M_S_',AGE$Sample),'ID'] <- '8M_S'
+AGE[grep('8V_I_',AGE$Sample),'ID'] <- '8V_I'
+AGE[grep('8V_S_',AGE$Sample),'ID'] <- '8V_S'
+
+# Remove extras---NT controls
+AGE<-AGE[-grep('D08', AGE$Well),]
+AGE<-AGE[-grep('C08', AGE$Well),]
+
+# Subset by Gene
+AGE_Actin<-AGE[grep('_Actin', AGE$Sample),]
+names(AGE_Actin)[3]<-"Actin"
+AGE_Dipt<-AGE[grep('_Dipt', AGE$Sample),]
+names(AGE_Dipt)[3]<-"Dipt"
+AGE_Att<-AGE[grep('_Att', AGE$Sample),]
+names(AGE_Att)[3]<-"Att"
+AGE_Def<-AGE[grep('_Def', AGE$Sample),]
+names(AGE_Def)[3]<-"Def"
+AGE_Cec<-AGE[grep('_Cec', AGE$Sample),]
+names(AGE_Cec)[3]<-"Cec"
+
+
+# Remove 8M_S_5 from Actin and Def Data sets because it didn't read in Dipt and Att and Cec
+AGE_Actin<-AGE_Actin[-grep('D07', AGE_Actin$Well),]
+AGE_Def<-AGE_Def[-grep('D07', AGE_Def$Well),]
+
+
+# Column bind Gene subsets by ID
+AGE_Actin$Dipt<-AGE_Dipt$Dipt
+AGE_Actin$Att<-AGE_Att$Att
+AGE_Actin$Def<-AGE_Def$Def
+AGE_Actin$Cec<-AGE_Cec$Cec
+
+
+#B<-cbind(Two_RP, Two_Dipt)
+#Test<- merge(as.data.frame(AGE_Actin), as.data.frame(AGE_Dipt), by='Well', all=T)
+
+AGE_Filter<-AGE_Actin
+# Add Infected Status
+AGE_Filter$Infection<-c('-')
+
+AGE_Filter[grep('4M_I_',AGE_Filter$Sample),'Infection'] <- 'I'
+AGE_Filter[grep('4M_S_',AGE_Filter$Sample),'Infection'] <- 'S'
+AGE_Filter[grep('4V_I_',AGE_Filter$Sample),'Infection'] <- 'I'
+AGE_Filter[grep('4V_S_',AGE_Filter$Sample),'Infection'] <- 'S'
+
+AGE_Filter[grep('14M_I_',AGE_Filter$Sample),'Infection'] <- 'I'
+AGE_Filter[grep('14M_S_',AGE_Filter$Sample),'Infection'] <- 'S'
+AGE_Filter[grep('14V_I_',AGE_Filter$Sample),'Infection'] <- 'I'
+AGE_Filter[grep('14V_S_',AGE_Filter$Sample),'Infection'] <- 'S'
+
+AGE_Filter[grep('8M_I_',AGE_Filter$Sample),'Infection'] <- 'I'
+AGE_Filter[grep('8M_S_',AGE_Filter$Sample),'Infection'] <- 'S'
+AGE_Filter[grep('8V_I_',AGE_Filter$Sample),'Infection'] <- 'I'
+AGE_Filter[grep('8V_S_',AGE_Filter$Sample),'Infection'] <- 'S'
+
+# Mating Treatment
+AGE_Filter$Mating.Treatment<-c('-')
+AGE_Filter[grep('4M_I_',AGE_Filter$Sample),'Mating.Treatment'] <- '4M'
+AGE_Filter[grep('4M_S_',AGE_Filter$Sample),'Mating.Treatment'] <- '4M'
+AGE_Filter[grep('4V_I_',AGE_Filter$Sample),'Mating.Treatment'] <- '4V'
+AGE_Filter[grep('4V_S_',AGE_Filter$Sample),'Mating.Treatment'] <- '4V'
+
+AGE_Filter[grep('14M_I_',AGE_Filter$Sample),'Mating.Treatment'] <- '14M'
+AGE_Filter[grep('14M_S_',AGE_Filter$Sample),'Mating.Treatment'] <- '14M'
+AGE_Filter[grep('14V_I_',AGE_Filter$Sample),'Mating.Treatment'] <- '14V'
+AGE_Filter[grep('14V_S_',AGE_Filter$Sample),'Mating.Treatment'] <- '14V'
+
+AGE_Filter[grep('8M_I_',AGE_Filter$Sample),'Mating.Treatment'] <- '8M'
+AGE_Filter[grep('8M_S_',AGE_Filter$Sample),'Mating.Treatment'] <- '8M'
+AGE_Filter[grep('8V_I_',AGE_Filter$Sample),'Mating.Treatment'] <- '8V'
+AGE_Filter[grep('8V_S_',AGE_Filter$Sample),'Mating.Treatment'] <- '8V'
+
+# Mating Status
+AGE_Filter$Mating.Status<-c('-')
+
+AGE_Filter[grep('4M_I_',AGE_Filter$Sample),'Mating.Status'] <- 'M'
+AGE_Filter[grep('4M_S_',AGE_Filter$Sample),'Mating.Status'] <- 'M'
+AGE_Filter[grep('4V_I_',AGE_Filter$Sample),'Mating.Status'] <- 'V'
+AGE_Filter[grep('4V_S_',AGE_Filter$Sample),'Mating.Status'] <- 'V'
+
+AGE_Filter[grep('14M_I_',AGE_Filter$Sample),'Mating.Status'] <- 'M'
+AGE_Filter[grep('14M_S_',AGE_Filter$Sample),'Mating.Status'] <- 'M'
+AGE_Filter[grep('14V_I_',AGE_Filter$Sample),'Mating.Status'] <- 'V'
+AGE_Filter[grep('14V_S_',AGE_Filter$Sample),'Mating.Status'] <- 'V'
+
+AGE_Filter[grep('8M_I_',AGE_Filter$Sample),'Mating.Status'] <- 'M'
+AGE_Filter[grep('8M_S_',AGE_Filter$Sample),'Mating.Status'] <- 'M'
+AGE_Filter[grep('8V_I_',AGE_Filter$Sample),'Mating.Status'] <- 'V'
+AGE_Filter[grep('8V_S_',AGE_Filter$Sample),'Mating.Status'] <- 'V'
+```
+#### Simple Model for each AMP
+Y = u + RpL32 + Mating.Treatment + Infection + Mating.Treatment x Infection
+# Aging Diptericin Comparisons
+```{r}
+
+##### Aging Diptericin Model ####
+AGE_DIP_ls<- lm(Dipt~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=AGE_Filter)
+anova(AGE_DIP_ls)
+
+
+#Analysis of Variance Table
+
+#Response: Dipt
+#Df Sum Sq Mean Sq  F value    Pr(>F)    
+#Actin                       1 882.71  882.71 288.4659 < 2.2e-16 ***
+ # Mating.Treatment            5  75.96   15.19   4.9649  0.001087 ** 
+#  Infection                   1 587.66  587.66 192.0446 < 2.2e-16 ***
+#  Mating.Treatment:Infection  5  25.04    5.01   1.6366  0.170325    
+#Residuals                  44 134.64    3.06                       
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+# DIP ls means 
+marginal.1.1 = lsmeans(AGE_DIP_ls, ~ Mating.Treatment:Infection)
+
+AGE_CLD_Dipt<- cld(marginal.1.1,
+                  alpha=0.05,
+                  Letters=letters,
+                  adjust="tukey")
+AGE_CLD_Dipt
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#4V               I           22.1 0.876 44     19.5     24.7  a    
+#4M               I           22.3 0.784 44     20.0     24.7  a    
+#8V               I           22.4 0.827 44     19.9     24.9  a    
+#14V              I           22.4 0.818 44     20.0     24.9  a    
+#14M              I           22.5 0.803 44     20.0     24.9  a    
+#8M               I           23.2 0.811 44     20.8     25.6  a    
+#14M              S           29.0 0.833 44     26.5     31.5   b   
+#14V              S           29.2 0.813 44     26.7     31.6   b   
+#4M               S           29.3 0.921 44     26.5     32.1   b   
+#4V               S           31.2 0.852 44     28.7     33.8   b   
+#8V               S           31.7 0.783 44     29.3     34.0   b   
+#8M               S           33.0 0.964 44     30.1     35.9   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 12 estimates 
+#P value adjustment: tukey method for comparing a family of 12 estimates 
+#significance level used: alpha = 0.05 
+
+#### Aging Dipt Comparisons ####
+
+age_dipt_pairs<-update(pairs(marginal.1.1, by= "Mating.Treatment"), by=NULL)
+summary(age_dipt_pairs)
+age_pairs_dipt_CLD<- cld(age_dipt_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+age_pairs_dipt_CLD
+
+# contrast Mating.Treatment estimate   SE df t.ratio p.value .group  pos gene      
+#I - S    8M                  -9.77 1.33 44 -7.362  <.0001   a     9.77 Diptericin
+#I - S    8V                  -9.31 1.15 44 -8.105  <.0001   a     9.31 Diptericin
+#I - S    4V                  -9.14 1.24 44 -7.388  <.0001   a     9.14 Diptericin
+#I - S    4M                  -6.96 1.22 44 -5.698  <.0001   a     6.96 Diptericin
+#I - S    14V                 -6.74 1.11 44 -6.088  <.0001   a     6.74 Diptericin
+#I - S    14M                 -6.54 1.20 44 -5.447  <.0001   a     6.54 Diptericin
+
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05
+
+
+age_pairs_dipt_CLD$pos<-(-age_pairs_dipt_CLD$estimate)
+
+age_pairs_dipt_CLD$gene<-"Diptericin"
+
+
+age_pairs_dipt_CLD$Mating.Treatment<-factor(age_pairs_dipt_CLD$Mating.Treatment, levels=c("4M","4V","8M", "8V", "14M", "14V"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57", "pink")
+
+ggplot(age_pairs_dipt_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("4M"="4 Days, Mated","4V"="4 Days, Virgin","8M"="8 Days, Mated", "8V"="8 Days, Virgin", "14M"= "14 Days, Mated", "14V"="14 Days, Virgin")) +
+  labs(x="Age", y="Diptericin Gene Expression (log 2)")
+ggsave("NEW_Age_Dipt_Diff.pdf")
+```
+# Aging Defensin Comparisons
+```{r}
+##### Aging Defensin Model ####
+AGE_DEF_ls<- lm(Def~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=AGE_Filter)
+anova(AGE_DEF_ls)
+
+
+#Analysis of Variance Table
+
+#Response: Def
+#Df  Sum Sq Mean Sq  F value    Pr(>F)    
+#Actin                       1 143.943 143.943 105.8739 2.750e-13 ***
+ # Mating.Treatment            5  37.861   7.572   5.5695 0.0004648 ***
+#  Infection                   1  68.718  68.718  50.5439 7.904e-09 ***
+#  Mating.Treatment:Infection  5   3.104   0.621   0.4566 0.8062077    
+#Residuals                  44  59.821   1.360                       
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+# DIP ls means 
+marginal.2.1 = lsmeans(AGE_DEF_ls, ~ Mating.Treatment:Infection)
+
+AGE_CLD_Def<- cld(marginal.2.1,
+                   alpha=0.05,
+                   Letters=letters,
+                   adjust="tukey")
+AGE_CLD_Def
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#4V               I           24.0 0.584 44     22.2     25.7  a    
+#14M              I           24.0 0.535 44     22.4     25.6  a    
+#4M               I           24.0 0.523 44     22.5     25.6  a    
+#8V               I           25.1 0.551 44     23.4     26.7  ab   
+#14V              I           25.3 0.545 44     23.6     26.9  ab   
+#8M               I           25.6 0.541 44     24.0     27.3  abc  
+#4M               S           26.3 0.614 44     24.4     28.1  abc  
+#4V               S           27.0 0.568 44     25.3     28.7   bc  
+#14V              S           27.3 0.542 44     25.7     29.0   bc  
+#14M              S           27.5 0.555 44     25.8     29.1   bc  
+#8V               S           28.1 0.522 44     26.5     29.6    c  
+#8M               S           28.5 0.643 44     26.5     30.4    c  
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 12 estimates 
+#P value adjustment: tukey method for comparing a family of 12 estimates 
+#significance level used: alpha = 0.05 
+
+
+#### Agin Def Comparisons ####
+
+age_def_pairs<-update(pairs(marginal.2.1, by= "Mating.Treatment"), by=NULL)
+summary(age_def_pairs)
+age_pairs_def_CLD<- cld(age_def_pairs,
+                         alpha=0.05,
+                         Letters=letters,
+                         adjust="tukey")
+age_pairs_def_CLD
+
+#contrast Mating.Treatment estimate    SE df t.ratio p.value .group  pos gene    
+#I - S    14M                 -3.43 0.800 44 -4.291  0.0001   a     3.43 Defensin
+#I - S    4V                  -3.06 0.825 44 -3.711  0.0006   a     3.06 Defensin
+#I - S    8V                  -3.00 0.765 44 -3.922  0.0003   a     3.00 Defensin
+#I - S    8M                  -2.83 0.885 44 -3.203  0.0025   a     2.83 Defensin
+#I - S    4M                  -2.23 0.815 44 -2.739  0.0089   a     2.23 Defensin
+#I - S    14V                 -2.07 0.738 44 -2.809  0.0074   a     2.07 Defensin
+
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05 
+
+age_pairs_def_CLD$pos<-(-age_pairs_def_CLD$estimate)
+
+age_pairs_def_CLD$gene<-"Defensin"
+
+age_pairs_def_CLD$Mating.Treatment<-factor(age_pairs_def_CLD$Mating.Treatment, levels=c("4M","4V","8M", "8V", "14M", "14V"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57", "pink")
+
+ggplot(age_pairs_def_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("4M"="4 Days, Mated","4V"="4 Days, Virgin","8M"="8 Days, Mated", "8V"="8 Days, Virgin", "14M"= "14 Days, Mated", "14V"="14 Days, Virgin")) +
+  labs(x="Age", y="Defensin Gene Expression (log 2)")
+ggsave("NEW_Age_Def_Diff.pdf")
+```
+# Aging Attacin Comparisons
+```{r}
+##### Aging Att Model ####
+AGE_ATT_ls<- lm(Att~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=AGE_Filter)
+anova(AGE_ATT_ls)
+
+
+#Analysis of Variance Table
+
+#Response: Att
+#Df Sum Sq Mean Sq  F value    Pr(>F)    
+#Actin                       1 865.08  865.08 352.9827 < 2.2e-16 ***
+##  Mating.Treatment            5  64.77   12.95   5.2855 0.0006906 ***
+#  Infection                   1 410.40  410.40 167.4564 < 2.2e-16 ***
+#  Mating.Treatment:Infection  5   9.73    1.95   0.7938 0.5599460    
+#Residuals                  44 107.83    2.45                       
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+# Att ls means 
+marginal.3.1 = lsmeans(AGE_ATT_ls, ~ Mating.Treatment:Infection)
+
+AGE_CLD_ATT<- cld(marginal.3.1,
+                  alpha=0.05,
+                  Letters=letters,
+                  adjust="tukey")
+AGE_CLD_ATT
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#4M               I           23.5 0.702 44     21.4     25.6  a    
+#4V               I           23.8 0.784 44     21.5     26.2  a    
+#14M              I           24.0 0.718 44     21.8     26.1  a    
+#14V              I           24.1 0.732 44     21.9     26.3  a    
+#8V               I           24.2 0.740 44     21.9     26.4  a    
+#8M               I           24.8 0.726 44     22.6     26.9  a    
+#14M              S           29.5 0.746 44     27.3     31.8   b   
+#4M               S           29.8 0.824 44     27.3     32.3   b   
+#14V              S           30.0 0.727 44     27.9     32.2   b   
+#4V               S           30.9 0.763 44     28.6     33.2   b   
+#8V               S           31.7 0.701 44     29.6     33.8   b   
+#8M               S           32.6 0.863 44     30.0     35.2   b   
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 12 estimates 
+#P value adjustment: tukey method for comparing a family of 12 estimates 
+#significance level used: alpha = 0.05 
+
+#### Agin Att Comparisons ####
+
+age_att_pairs<-update(pairs(marginal.3.1, by= "Mating.Treatment"), by=NULL)
+summary(age_att_pairs)
+age_pairs_att_CLD<- cld(age_att_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+age_pairs_att_CLD
+
+# contrast Mating.Treatment estimate   SE df t.ratio p.value .group  pos gene   
+# I - S    8M                  -7.83 1.19 44 -6.593  <.0001   a     7.83 Attacin
+# I - S    8V                  -7.51 1.03 44 -7.312  <.0001   a     7.51 Attacin
+# I - S    4V                  -7.08 1.11 44 -6.393  <.0001   a     7.08 Attacin
+# I - S    4M                  -6.33 1.09 44 -5.785  <.0001   a     6.33 Attacin
+# I - S    14V                 -5.90 0.99 44 -5.960  <.0001   a     5.90 Attacin
+# I - S    14M                 -5.56 1.07 44 -5.170  <.0001   a     5.56 Attacin
+
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05 
+
+age_pairs_att_CLD$pos<-(-age_pairs_att_CLD$estimate)
+
+age_pairs_att_CLD$gene<-"Attacin"
+
+age_pairs_att_CLD$Mating.Treatment<-factor(age_pairs_att_CLD$Mating.Treatment, levels=c("4M","4V","8M", "8V", "14M", "14V"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57", "pink")
+
+ggplot(age_pairs_att_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("4M"="4 Days, Mated","4V"="4 Days, Virgin","8M"="8 Days, Mated", "8V"="8 Days, Virgin", "14M"= "14 Days, Mated", "14V"="14 Days, Virgin")) +
+  labs(x="Age", y="Attacin Gene Expression (log 2)")
+ggsave("NEW_Age_Att_Diff.pdf")
+```
+# Aging Cecropin Comparisons
+```{r}
+##### Aging Cec Model ####
+AGE_Cec_ls<- lm(Cec~Actin + Mating.Treatment + Infection + Mating.Treatment*Infection, data=AGE_Filter)
+anova(AGE_Cec_ls)
+
+
+#Analysis of Variance Table
+
+#Response: Cec
+#Df Sum Sq Mean Sq  F value    Pr(>F)    
+#Actin                       1 752.76  752.76 180.6414 < 2.2e-16 ***
+ # Mating.Treatment            5 110.00   22.00   5.2794 0.0006966 ***
+#  Infection                   1 705.99  705.99 169.4179 < 2.2e-16 ***
+#  Mating.Treatment:Infection  5  25.88    5.18   1.2420 0.3059849    
+#Residuals                  44 183.36    4.17                       
+#---
+#  Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+# Att ls means 
+marginal.4.1 = lsmeans(AGE_Cec_ls, ~ Mating.Treatment:Infection)
+
+AGE_CLD_Cec<- cld(marginal.4.1,
+                  alpha=0.05,
+                  Letters=letters,
+                  adjust="tukey")
+AGE_CLD_Cec
+
+#Mating.Treatment Infection lsmean    SE df lower.CL upper.CL .group
+#4M               I           21.9 0.915 44     19.1     24.6  a    
+#14M              I           22.2 0.937 44     19.3     25.0  a    
+#4V               I           22.3 1.023 44     19.2     25.4  a    
+#14V              I           22.5 0.954 44     19.6     25.4  a    
+#8M               I           22.6 0.947 44     19.7     25.4  a    
+#8V               I           22.7 0.965 44     19.8     25.6  a    
+#14M              S           28.9 0.972 44     26.0     31.9   b   
+#4M               S           30.4 1.075 44     27.1     33.6   bc  
+#14V              S           30.4 0.948 44     27.6     33.3   bc  
+#4V               S           31.4 0.995 44     28.4     34.4   bc  
+#8V               S           32.2 0.914 44     29.4     35.0   bc  
+#8M               S           33.8 1.125 44     30.4     37.1    c  
+
+#Confidence level used: 0.95 
+#Conf-level adjustment: sidak method for 12 estimates 
+#P value adjustment: tukey method for comparing a family of 12 estimates 
+#significance level used: alpha = 0.05
+
+#### Agin Cec Comparisons ####
+
+age_cec_pairs<-update(pairs(marginal.4.1, by= "Mating.Treatment"), by=NULL)
+summary(age_cec_pairs)
+age_pairs_cec_CLD<- cld(age_cec_pairs,
+                        alpha=0.05,
+                        Letters=letters,
+                        adjust="tukey")
+age_pairs_cec_CLD
+
+#contrast Mating.Treatment estimate   SE df t.ratio p.value .group   pos gene    
+#I - S    8M                 -11.20 1.55 44 -7.231  <.0001   a     11.20 Cecropin
+#I - S    8V                  -9.53 1.34 44 -7.113  <.0001   a      9.53 Cecropin
+#I - S    4V                  -9.04 1.44 44 -6.257  <.0001   a      9.04 Cecropin
+#I - S    4M                  -8.50 1.43 44 -5.961  <.0001   a      8.50 Cecropin
+#I - S    14V                 -7.93 1.29 44 -6.144  <.0001   a      7.93 Cecropin
+#I - S    14M                 -6.78 1.40 44 -4.840  <.0001   a      6.78 Cecropin
+
+#P value adjustment: tukey method for comparing a family of 6 estimates 
+#significance level used: alpha = 0.05
+
+age_pairs_cec_CLD$pos<-(-age_pairs_cec_CLD$estimate)
+
+age_pairs_cec_CLD$gene<-"Cecropin"
+
+age_pairs_cec_CLD$Mating.Treatment<-factor(age_pairs_cec_CLD$Mating.Treatment, levels=c("4M","4V","8M", "8V", "14M", "14V"))
+
+mycolors2<- c("grey23","steelblue2", "#D65108", "navy", "grey57", "pink")
+
+ggplot(age_pairs_cec_CLD,
+       aes( x= Mating.Treatment,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  geom_bar(stat= "identity")  + 
+  scale_color_manual(values = mycolors2) + 
+  scale_fill_manual(values = mycolors2) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(.9)) +
+  
+  
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  scale_x_discrete(labels=c("4M"="4 Days, Mated","4V"="4 Days, Virgin","8M"="8 Days, Mated", "8V"="8 Days, Virgin", "14M"= "14 Days, Mated", "14V"="14 Days, Virgin")) +
+  labs(x="Age", y="Cecropin Gene Expression (log 2)")
+ggsave("NEW_Age_Cec_Diff.pdf")
+```
+# Aging Composite Graph
+```{r}
+#### Rearrange by Time Point####
+# Similar to TI and 2M Composite graphs#
+# Fuse together all the CLD data sets
+# Filter by age and mating treatment
+
+
+AGE_Comp<-rbind(age_pairs_att_CLD,age_pairs_cec_CLD, age_pairs_dipt_CLD, age_pairs_def_CLD)
+AGE_Comp$gene<-factor(AGE_Comp$gene, levels=c("Attacin","Cecropin","Diptericin", "Defensin"))
+AGE_Comp$Mating.Treatment<-factor(AGE_Comp$Mating.Treatment, levels=c("4V","8V","14V","4M","8M","14M" ))
+AGE_Comp$Mating.Treatment<-factor(AGE_Comp$Mating.Treatment, levels=c("4V", "4M", "8V","8M", "14V", "14M"))
+mycolors3<-c("grey23", "grey65", "steelblue2","lightblue1","#D65108","lightsalmon","#D65108","midnightblue","#3b5c8e")
+
+ggplot(AGE_Comp,
+       aes( x= gene,
+            y= pos,
+            fill=Mating.Treatment)) +
+  scale_color_manual(values = mycolors3) + 
+  scale_fill_manual(values = mycolors3) +
+  geom_col(position = "dodge", width= 0.75) +
+  geom_errorbar(aes(ymin=pos-SE, ymax=pos+SE), width=.2,
+                position=position_dodge(0.75)) +
+  scale_y_continuous(trans = log2_trans(),
+                     breaks = trans_breaks("log2", function(x) 2^x),
+                     labels = trans_format("log2", math_format(.x))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), axis.line = element_line(colour = "black"), legend.position = "right", legend.title = element_text(size = 15),legend.text = element_text(size=12), legend.key.size = unit(1.5, "cm"),legend.key.width = unit(1,"cm"), axis.text.x = element_text(color = "black", size = 12, angle=0, face = "plain"), axis.title.x = element_text(color="black", size=14, angle=0, face="bold"), axis.title.y = element_text(color="black", size=14, angle=90, face="bold")) + 
+  labs(x="Gene", y="Infection Induced AMP Expression (log 2)")
+
+```
+
