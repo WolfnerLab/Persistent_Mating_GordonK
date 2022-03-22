@@ -1,0 +1,9 @@
+﻿1,2,3,4,5,6,7,8,9,10,11,12
+TI: 10I_1_Att,TI: 7I_3_Att,TI: 4I_5_Att,TI: VI_1_Att,TI: 10U_3_Att,TI: 7U_5_Att,TI: 2U_1_Att,TI: VU_3_Att,VDRC: GD/Actin,VDRC: GD/Actin,VDRC: GD/Actin,
+TI: 10I_2_Att,TI: 7I_4_Att,TI: 4I_6_Att,TI: VI_2_Att,TI: 10U_4_Att,TI: 7U_6_Att,TI: 2U_2_Att,TI: VU_4_Att,VDRC: YP1/CyO,TRIP: YP2/AttP,VDRC: YP3/CyO,
+TI: 10I_3_Att,TI: 7I_5_Att,TI: 2I_1_Att,TI: VI_3_Att,TI: 10U_5_Att,TI: 4U_1_Att,TI: 2U_3_Att,TI: VU_5_Att,VDRC: YP1/Actin,TRIP: YP2/FB,VDRC: YP3/Actin,
+TI: 10I_4_Att,TI: 7I_6_Att,TI: 2I_2_Att,TI: VI_4_Att,TI: 10U_6_Att,TI: 4U_2_Att,TI: 2U_4_Att,NTC_Att,TRIP: YP1/AttP,NTC,TRIP: YP3/AttP,
+TI: 10I_5_Att,TI: 4I_1_Att,TI: 2I_3_Att,TI: VI_5_Att,TI: 7U_1_Att,TI: 4U_3_Att,TI: 2U_5_Att,,TRIP: YP1/Yolk,,TRIP: YP3/Yolk,
+TI: 10I_6_Att,TI: 4I_2_Att,TI: 2I_4_Att,TI: VI_6_Att,TI: 7U_2_Att,TI: 4U_4_Att,TI: 2U_6_Att,,TRIP: YP1/FB,,TRIP: YP3/FB,
+TI: 7I_1_Att,TI: 4I_3_Att,TI: 2I_5_Att,TI: 10U_1_Att,TI: 7U_3_Att,TI: 4U_5_Att,TI: VU_1_Att,,NTC,,NTC,
+TI: 7I_2_Att,TI: 4I_4_Att,TI: 2I_6_Att,TI: 10U_2_Att,TI: 7U_4_Att,TI: 4U_6_Att,TI: VU_2_Att,,,,,

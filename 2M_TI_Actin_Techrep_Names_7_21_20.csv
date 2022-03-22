@@ -1,0 +1,9 @@
+﻿1,2,3,4,5,6,7,8,9,10,11,12
+TI: 10I_1_Actin,TI: 7I_3_Actin,TI: 4I_5_Actin,TI: VI_1_Actin,TI: 10U_3_Actin,TI: 7U_5_Actin,TI: 2U_1_Actin,TI: VU_3_Actin,2M: 2MI_1_Actin,2M: 1MI_2_Actin,2M: VI_2_Actin,2M: 2MU_2_Actin
+TI: 10I_2_Actin,TI: 7I_4_Actin,TI: 4I_6_Actin,TI: VI_2_Actin,TI: 10U_4_Actin,TI: 7U_6_Actin,TI: 2U_2_Actin,TI: VU_4_Actin,2M: 2MI_2_Actin,2M: 1MI_3_Actin,2M: VI_3_Actin,2M: 2MU_3_Actin
+TI: 10I_3_Actin,TI: 7I_5_Actin,TI: 2I_1_Actin,TI: VI_3_Actin,TI: 10U_5_Actin,TI: 4U_1_Actin,TI: 2U_3_Actin,TI: VU_5_Actin,2M: 2MI_3_Actin,2M: 1MI_4_Actin,2M: VI_4_Actin,2M: 1MU_1_Actin
+TI: 10I_4_Actin,TI: 7I_6_Actin,TI: 2I_2_Actin,TI: VI_4_Actin,TI: 10U_6_Actin,TI: 4U_2_Actin,TI: 2U_4_Actin,NTC_Actin,2M: 2MI_4_Actin,2M: 1MI_5_Actin,2M: VI_5_Actin,2M: 1MU_2_Actin
+TI: 10I_5_Actin,TI: 4I_1_Actin,TI: 2I_3_Actin,TI: VI_5_Actin,TI: 7U_1_Actin,TI: 4U_3_Actin,TI: 2U_5_Actin,NTC_Actin,2M: 2MI_5_Actin,2M: 1MI_6_Actin,2M: VI_6_Actin,2M: 1MU_3_Actin
+TI: 10I_6_Actin,TI: 4I_2_Actin,TI: 2I_4_Actin,TI: VI_6_Actin,TI: 7U_2_Actin,TI: 4U_4_Actin,TI: 2U_6_Actin,,2M: 2MI_6_Actin,2M: 1MI_7_Actin,2M: VI_7_Actin,2M: VU_1_Actin
+TI: 7I_1_Actin,TI: 4I_3_Actin,TI: 2I_5_Actin,TI: 10U_1_Actin,TI: 7U_3_Actin,TI: 4U_5_Actin,TI: VU_1_Actin,,2M: 2MI_7_Actin,2M: 1MI_8_Actin,2M: VI_8_Actin,2M: VU_2_Actin
+TI: 7I_2_Actin,TI: 4I_4_Actin,TI: 2I_6_Actin,TI: 10U_2_Actin,TI: 7U_4_Actin,TI: 4U_6_Actin,TI: VU_2_Actin,,2M: 1MI_1_Actin,2M: VI_1_Actin,2M: 2MU_1_Actin,2M: VU_3_Actin

@@ -1,0 +1,9 @@
+﻿1,2,3,4,5,6,7,8,9,10,11,12
+TI: 10I_1_Def,TI: 7I_3_Def,TI: 4I_5_Def,TI: VI_1_Def,TI: 10U_3_Def,TI: 7U_5_Def,TI: 2U_1_Def,TI: VU_3_Def,VDRC: GD/Actin,VDRC: GD/Actin,VDRC: GD/Actin,
+TI: 10I_2_Def,TI: 7I_4_Def,TI: 4I_6_Def,TI: VI_2_Def,TI: 10U_4_Def,TI: 7U_6_Def,TI: 2U_2_Def,TI: VU_4_Def,VDRC: YP1/CyO,TRIP: YP2/AttP,VDRC: YP3/CyO,
+TI: 10I_3_Def,TI: 7I_5_Def,TI: 2I_1_Def,TI: VI_3_Def,TI: 10U_5_Def,TI: 4U_1_Def,TI: 2U_3_Def,TI: VU_5_Def,VDRC: YP1/Actin,TRIP: YP2/FB,VDRC: YP3/Actin,
+TI: 10I_4_Def,TI: 7I_6_Def,TI: 2I_2_Def,TI: VI_4_Def,TI: 10U_6_Def,TI: 4U_2_Def,TI: 2U_4_Def,NTC_Def,TRIP: YP1/AttP,NTC,TRIP: YP3/AttP,
+TI: 10I_5_Def,TI: 4I_1_Def,TI: 2I_3_Def,TI: VI_5_Def,TI: 7U_1_Def,TI: 4U_3_Def,TI: 2U_5_Def,,TRIP: YP1/Yolk,,TRIP: YP3/Yolk,
+TI: 10I_6_Def,TI: 4I_2_Def,TI: 2I_4_Def,TI: VI_6_Def,TI: 7U_2_Def,TI: 4U_4_Def,TI: 2U_6_Def,,TRIP: YP1/FB,,TRIP: YP3/FB,
+TI: 7I_1_Def,TI: 4I_3_Def,TI: 2I_5_Def,TI: 10U_1_Def,TI: 7U_3_Def,TI: 4U_5_Def,TI: VU_1_Def,,NTC,,NTC,
+TI: 7I_2_Def,TI: 4I_4_Def,TI: 2I_6_Def,TI: 10U_2_Def,TI: 7U_4_Def,TI: 4U_6_Def,TI: VU_2_Def,,,,,
